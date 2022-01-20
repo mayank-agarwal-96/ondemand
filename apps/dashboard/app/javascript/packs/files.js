@@ -24,6 +24,7 @@ window.dataFromJsonResponse = dataFromJsonResponse;
 window.newFile = newFile;
 window.newDirectory = newDirectory;
 window.reloadTable = reloadTable;
+window.reloadTableBrowseMode = reloadTableBrowseMode;
 window.goto = goto;
 window.loading = loading;
 window.doneLoading = doneLoading;
@@ -58,14 +59,46 @@ function newDirectory(filename){
 
 function reloadTable(url){
   var request_url = url || history.state.currentDirectoryUrl;
+  return fetch(request_url, {headers: {'Accept':'application/json'}})
+    .then(response => dataFromJsonResponse(response))
+    .then(function(data) {
+      console.log(data);
+      $('#shell-wrapper').replaceWith((data.shell_dropdown_html))
 
+      table.clear();
+      table.rows.add(data.files);
+      table.draw();
+
+      $('#open-in-terminal-btn').attr('href', data.shell_url);
+      $('#open-in-terminal-btn').removeClass('disabled');
+
+      return Promise.resolve(data);
+    })
+    .catch((e) => {
+      Swal.fire(e.message, `Error occurred when attempting to access ${request_url}`, 'error');
+
+      $('#open-in-terminal-btn').addClass('disabled');
+      return Promise.reject(e);
+    });
+}
+
+function reloadTableBrowseMode(url){
+  var request_url = url || history.state.currentDirectoryUrl;
+  console.log(request_url);
   return fetch(request_url, {headers: {'Accept':'application/json'}})
     .then(response => dataFromJsonResponse(response))
     .then(function(data) {
       $('#shell-wrapper').replaceWith((data.shell_dropdown_html))
 
       table.clear();
-      table.rows.add(data.files);
+      $.each( data.files, function( key, value ) {
+        if( value.type == 'd') {
+          value.url = value.url.replace('/files/','/filesmin/');
+          console.log(value);
+          table.row.add(value);
+        }
+      });      
+      
       table.draw();
 
       $('#open-in-terminal-btn').attr('href', data.shell_url);

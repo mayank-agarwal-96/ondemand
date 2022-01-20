@@ -1,7 +1,6 @@
 require "authz/app_developer_constraint"
 
 Rails.application.routes.draw do
-
   if Configuration.jobs_app_alpha?
     namespace :jobs do
       root 'projects#index'
@@ -23,26 +22,29 @@ Rails.application.routes.draw do
       get "files/api/v1/fs(/*filepath)" => "files#fs", :defaults => { :format => 'html', :filepath => '/' }, :format => false
       put "files/api/v1/fs/*filepath" => "files#update", :format => false, :defaults => { :format => 'json' }
     end
+
     post "files/upload"
 
     get "files", to: redirect("files/fs#{Dir.home}")
 
     resources :transfers, only: [:show, :create, :destroy]
   end
-
-  constraints filepath: /.+/ do
-    get 'filesmin/fs(/*filepath)' => 'files_min#fs', :defaults => { :format => 'html', :filepath => '/' }, :format => false, as: :files_min
-    # put "filesmin/fs/*filepath" => "filesmin#update", :format => false, :defaults => { :format => 'json' }
+  if Configuration.can_access_files?
+    constraints filepath: /.+/ do
+      get 'filesmin/fs(/*filepath)' => 'files_min#fs', :defaults => { :format => 'html', :filepath => '/' }, :format => false, as: :files_min
+      put 'filesmin/fs/*filepath' => 'files_min#update', :format => false, :defaults => { :format => 'json' }
+      get 'filesmin/api/v1/fs(/*filepath)' => 'files_min#fs', :defaults => { :format => 'html', :filepath => '/' }, :format => false
+      put 'filesmin/api/v1/fs/*filepath' => 'files_min#update', :format => false, :defaults => { :format => 'json' }
+    end
   end
 
-  get "filesmin", to: redirect("filesmin/fs#{Dir.home}")
+  get 'filesmin', to: redirect("filesmin/fs#{Dir.home}")
 
-  post "files/upload"
+  post 'files/upload'
 
-  get "files", to: redirect("files/fs#{Dir.home}")
+  get 'files', to: redirect("files/fs#{Dir.home}")
 
   resources :transfers, only: [:show, :create, :destroy]
-
 
   if Configuration.can_access_file_editor?
     # App file editor

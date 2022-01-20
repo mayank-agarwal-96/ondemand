@@ -1,47 +1,21 @@
 <%# z-index:999 cause dropdowns are 1000 default sticky-top is 1020 https://getbootstrap.com/docs/4.6/layout/overview/#z-index %>
 <div class="text-right sticky-top bg-white border-bottom p-2 m-3" style="z-index: 999">
-  <button id="select-dir-btn" type="button" class="btn btn-outline-dark btn-sm"><i class="fas fa-folder-plus" aria-hidden="true"></i> Select Folder</button>
+  <!-- terminal button href is set via JavaScript because the URL is based on the current directory -->
+  <button id="new-dir-btn" type="button" class="btn btn-outline-dark btn-sm"><i class="fas fa-folder-plus" aria-hidden="true"></i> New Directory</button>
 </div>
 
 <hr>
 
 <div class="row">
 <div class="col-md-3">
-  <div id="clipboard" class="sticky-top">
-  </div>
-
   <nav>
     <ul id="favorites" class="nav nav-pills flex-column">
-      <li role="presentation" class="nav-item"><%= link_to 'Home Directory', files_path(Dir.home), class: "nav-link d bg-light" %></li>
+      <li role="presentation" class="nav-item"><%= link_to 'Home Directory', files_min_path(Dir.home), class: "nav-link d bg-light" %></li>
       <% OodFilesApp.new.favorite_paths.each do |p| %>
-        <li class="nav-item"><%= link_to p.title || p.path.to_s, files_path(p.path.to_s), class: "nav-link d bg-light" %>
+        <li class="nav-item"><%= link_to p.title || p.path.to_s, files_min_path(p.path.to_s), class: "nav-link d bg-light" %>
       <% end %>
     </ul>
   </nav>
-
-<script id="clipboard-template" type="text/template">
-{{#if files}}
-<div class="card mb-3">
-  <div class="card-body">
-    <button id="clipboard-clear" type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-    <p style="margin-top: 30px">Copy or move the files below from <code>{{from}}</code> to the current directory:</p>
-  </div>
-  <ul class="list-group list-group-flush">
-    {{#each files}}
-      {{#if directory}}
-        <li class="list-group-item"><span title="directory" class="fa fa-folder" style="color: gold"></span> {{name}}</li>
-      {{else}}
-        <li class="list-group-item"><span title="file" class="fa fa-file" style="color: lightgrey"></span> {{name}}</li>
-      {{/if}}
-    {{/each}}
-  </ul>
-  <div class="card-body">
-    <button id="clipboard-copy-to-dir" class="btn btn-primary">Copy</button>  <button id="clipboard-move-to-dir" class="btn btn-danger float-right">Move</button>
-  </div>
-</div>
-{{/if}}
-</script>
-
 
 <script id="actions-btn-template" type="text/template">
 <div class="btn-group actions-btn-group">
@@ -124,20 +98,9 @@
 <script>
 const csrf_token = document.querySelector('meta[name="csrf-token"]').content;
 
-// this uses event delegation so it captures events even if dom element is recreated
-var clipboardjs = new ClipboardJS('#copy-path');
-clipboardjs.on('success', function(e) {
-  $(e.trigger).tooltip({title: 'Copied path to clipboard!', trigger: 'manual', placement: 'bottom'}).tooltip('show');
-  setTimeout(() => $(e.trigger).tooltip('hide'), 2000);
-  e.clearSelection();
-});
-clipboardjs.on('error', function(e) {
-  e.clearSelection();
-});
-
 history.replaceState({
   currentDirectory: '<%= @path %>',
-  currentDirectoryUrl: '<%= files_path(@path) %>',
+  currentDirectoryUrl: '<%= files_min_path(@path) %>',
   currentDirectoryUpdatedAt: '<%= Time.now.to_i %>'
 }, null);
 
@@ -228,8 +191,13 @@ var table = $('#directory-contents').on('xhr.dt', function ( e, settings, json, 
         return `<input type="checkbox" ${selected ? 'checked' : ''}> ${selected ? 'checked' : ''}`;
       }
     },
-    { data: 'type', render: (data, type, row, meta) => data == 'd' ? '<span title="directory" class="fa fa-folder" style="color: gold"><span class="sr-only"> dir</span></span>' : '<span title="file" class="fa fa-file" style="color: lightgrey"><span class="sr-only"> file</span></span>' }, // type
-    { name: 'name', data: 'name', className: 'text-break', render: (data, type, row, meta) => `<a class="${row.type} name ${row.type == 'd' ? '' : 'view-file' }" href="${row.url}">${Handlebars.escapeExpression(data)}</a>` }, // name
+    { data: 'type', render: (data, type, row, meta) => data == 'd' ? '<span title="directory" class="fa fa-folder" style="color: gold"><span class="sr-only"> dir</span></span>' : '&nbsp;' }, // type
+    { 
+        name: 'name', 
+        data: 'name', 
+        className: 'text-break', 
+        render: (data, type, row, meta) => `<a class="${row.type} name ''" href="${row.url}">${Handlebars.escapeExpression(data)}</a>` 
+    }, // name
     { name: 'actions', orderable: false, data: null, render: (data, type, row, meta) => actionsBtnTemplate({ row_index: meta.row, file: row.type != 'd', data: row  }) }, // FIXME: pass row index or something needed for finding item
     { data: 'size',
       render: (data, type, row, meta) => {
@@ -271,7 +239,7 @@ table.on('draw.dtSelect.dt select.dtSelect.dt deselect.dtSelect.dt info.dt', fun
 
 <% unless alert %>
 // initial data load
-reloadTable();
+reloadTableBrowseMode();
 <% end %>
 
 $('#show-dotfiles').on('change', () => {
@@ -306,28 +274,7 @@ $('#path-breadcrumbs').on('click', '#goto-btn', function(){
     }
   })
   .then((result) => result.isConfirmed ? Promise.resolve(result.value) : Promise.reject('cancelled'))
-  .then((pathname) => goto('<%= files_path('/') %>' + pathname))
-});
-
-$('#new-file-btn').on("click", () => {
-  Swal.fire({
-    title: 'New File',
-    input: 'text',
-    inputLabel: 'Filename',
-    showCancelButton: true,
-    inputValidator: (value) => {
-      if (! value ) {
-        // TODO: validate filenames against listing
-        return 'Provide a non-empty filename.'
-      }
-      else if (value.includes("/")) {
-        // TODO: validate filenames against listing
-        return 'Illegal character (/) not allowed in filename.'
-      }
-    }
-  })
-  .then((result) => result.isConfirmed ? Promise.resolve(result.value) : Promise.reject('cancelled'))
-  .then((filename) => newFile(filename));
+  .then((pathname) => goto('<%= files_min_path('/') %>' + pathname))
 });
 
 $('#new-dir-btn').on("click", () => {
@@ -348,67 +295,6 @@ $('#new-dir-btn').on("click", () => {
   })
   .then((result) => result.isConfirmed ? Promise.resolve(result.value) : Promise.reject('cancelled'))
   .then((filename) => newDirectory(filename));
-});
-
-function downloadDirectory(file) {
-  let filename = $($.parseHTML(file.name)).text(),
-      canDownloadReq = `${history.state.currentDirectoryUrl}/${encodeURI(filename)}?can_download=${Date.now().toString()}`
-
-  loading('preparing to download directory: ' + file.name)
-
-  fetch(canDownloadReq, {
-      method: 'GET',
-      headers: {
-        'X-CSRF-Token': csrf_token,
-        'Accept': 'application/json'
-      }
-    })
-    .then(response => dataFromJsonResponse(response))
-    .then(data => {
-      if (data.can_download) {
-        doneLoading();
-        downloadFile(file)
-      } else {
-        Swal.fire('<%= t('dashboard.files_directory_download_error_modal_title') %>', data.error_message, 'error')
-      }
-    })
-    .catch(e => {
-      Swal.fire('<%= t('dashboard.files_directory_download_error_modal_title') %>', e.message, 'error')
-    })
-}
-
-function downloadFile(file) {
-  // creating the temporary iframe is exactly what the CloudCmd does
-  // so this just repeats the status quo
-
-  let filename = $($.parseHTML(file.name)).text(),
-      downloadUrl = `${history.state.currentDirectoryUrl}/${encodeURI(filename)}?download=${Date.now().toString()}`,
-      iframe = document.createElement('iframe'),
-      TIME = 30 * 1000;
-
-  iframe.setAttribute('class', 'd-none');
-  iframe.setAttribute('src', downloadUrl);
-
-  document.body.appendChild(iframe);
-
-  setTimeout(function() {
-    document.body.removeChild(iframe);
-  }, TIME);
-}
-
-$('#download-btn').on("click", () => {
-  let selection = table.rows({ selected: true }).data();
-  if(selection.length == 0) {
-    Swal.fire('Select a file, files, or directory to download', 'You have selected none.', 'error');
-  }
-  selection.toArray().forEach( (f) => {
-    if(f.type == 'd') {
-      downloadDirectory(f)
-    }
-    else if(f.type == 'f') {
-      downloadFile(f)
-    }
-  })
 });
 
 function getEmptyDirs(entry){
@@ -561,7 +447,7 @@ function getFilesAndDirectoriesFromDirectory (directoryReader, oldEntries, logDr
 
   uppy.on('complete', (result) => {
     if(result.successful.length > 0){
-      reloadTable();
+      reloadTableBrowseMode();
     }
   });
 
@@ -696,27 +582,6 @@ $('#directory-contents tbody').on('dblclick', 'tr td:not(:first-child)', functio
     if(a.classList.contains('d')) goto(a.getAttribute("href"));
 });
 
-function clearClipboard(){
-   localStorage.removeItem('filesClipboard');
-}
-
-function updateClipboardFromSelection(){
-  let selection = table.rows({selected: true}).data();
-  if(selection.length == 0){
-    clearClipboard();
-  }
-  else {
-    let clipboardData = {
-      from: history.state.currentDirectory,
-      files: selection.toArray().map((f) => {
-          return { directory: f.type == 'd', name: f.name };
-      })
-    };
-
-    localStorage.setItem('filesClipboard', JSON.stringify(clipboardData));
-  }
-}
-
 function transferFiles(files, action, summary){
   loading(_.startCase(summary));
 
@@ -737,13 +602,8 @@ function transferFiles(files, action, summary){
     }
     else {
       if(data.target_dir == history.state.currentDirectory){
-        reloadTable();
+        reloadTableBrowseMode();
       }
-    }
-
-    if(action == 'mv' || action == 'cp'){
-      clearClipboard();
-      updateViewForClipboard();
     }
   })
   .then(() => doneLoading())
@@ -786,7 +646,7 @@ function reportTransfer(data){
       if(newdata.completed) {
         if(! newdata.error_message) {
           if(newdata.target_dir == history.state.currentDirectory) {
-            reloadTable();
+            reloadTableBrowseMode();
           }
 
           // 3. fade out after 5 seconds
@@ -826,77 +686,6 @@ function copyFiles(files){
 
 function removeFiles(files){
   transferFiles(files, "rm", "remove files")
-}
-
-function updateViewForClipboard(){
-  let clipboard = JSON.parse(localStorage.getItem('filesClipboard') || '{}'),
-      template_str  = $('#clipboard-template').html(),
-      template = Handlebars.compile(template_str);
-
-  $('#clipboard').html(template(clipboard));
-
-  $('#clipboard-clear').on("click", () => {
-      clearClipboard();
-      updateViewForClipboard();
-  });
-
-
-  $('#clipboard-copy-to-dir').on("click", () => {
-    let clipboard = JSON.parse(localStorage.getItem('filesClipboard') || 'null');
-
-    if(clipboard){
-      clipboard.to = history.state.currentDirectory;
-
-      if(clipboard.from == clipboard.to){
-        console.error('clipboard from and to are identical')
-
-        // TODO: we want to support this use case
-        // copy and paste as a new filename
-        // but lots of edge cases
-        // (overwrite or rename duplicates)
-        // _copy
-        // _copy_2
-        // _copy_3
-        // _copy_4
-      }
-      else{
-        // [{"/from/file/path":"/to/file/path" }]
-        let files = {};
-        clipboard.files.forEach((f) => {
-          files[`${clipboard.from}/${f.name}`] = `${history.state.currentDirectory}/${f.name}`
-        });
-
-        copyFiles(files, csrf_token);
-      }
-    }
-    else{
-      console.error('files clipboard is empty');
-    }
-  });
-
-  $('#clipboard-move-to-dir').on("click", () => {
-    let clipboard = JSON.parse(localStorage.getItem('filesClipboard') || 'null');
-
-    if(clipboard){
-      clipboard.to = history.state.currentDirectory;
-
-      if(clipboard.from == clipboard.to){
-        console.error('clipboard from and to are identical')
-        // TODO:
-      }
-      else{
-        let files = {};
-        clipboard.files.forEach((f) => {
-          files[`${clipboard.from}/${f.name}`] = `${history.state.currentDirectory}/${f.name}`
-        });
-
-        moveFiles(files, csrf_token);
-      }
-    }
-    else{
-      console.error('files clipboard is empty');
-    }
-  });
 }
 
 $('#copy-move-btn').on("click", () => {
