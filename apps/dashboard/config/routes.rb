@@ -30,7 +30,21 @@ Rails.application.routes.draw do
     resources :transfers, only: [:show, :create, :destroy]
   end
 
-  if  Configuration.can_access_file_editor?
+  constraints filepath: /.+/ do
+    get 'filesmin/fs(/*filepath)' => 'files_min#fs', :defaults => { :format => 'html', :filepath => '/' }, :format => false, as: :files_min
+    # put "filesmin/fs/*filepath" => "filesmin#update", :format => false, :defaults => { :format => 'json' }
+  end
+
+  get "filesmin", to: redirect("filesmin/fs#{Dir.home}")
+
+  post "files/upload"
+
+  get "files", to: redirect("files/fs#{Dir.home}")
+
+  resources :transfers, only: [:show, :create, :destroy]
+
+
+  if Configuration.can_access_file_editor?
     # App file editor
     get "files/edit/*filepath" => "files#edit", defaults: { :path => "/" , :format => 'html' }, format: false
     get "files/edit" => "files#edit", :defaults => { :path => "/", :format => 'html' }, format: false
@@ -50,7 +64,6 @@ Rails.application.routes.draw do
 
   # analytics request appears in the access logs and google analytics
   get "analytics/:type" => proc { [204, {}, ['']] }, as: "analytics"
-
 
   get "apps/show/:name(/:type(/:owner))" => "apps#show", as: "app", defaults: { type: "sys" }
   get "apps/icon/:name(/:type(/:owner))" => "apps#icon", as: "app_icon", defaults: { type: "sys" }
