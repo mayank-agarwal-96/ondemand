@@ -28,6 +28,7 @@ window.reloadTableBrowseMode = reloadTableBrowseMode;
 window.goto = goto;
 window.loading = loading;
 window.doneLoading = doneLoading;
+window.launchFileNavigator = launchFileNavigator;
 
 function alertError(error_title, error_message){
   Swal.fire(error_title, error_message, 'error');
@@ -150,4 +151,9 @@ function loading(title){
 
 function doneLoading(){
   Swal.close();
+}
+
+function launchFileNavigator(startingLocation) {
+    var data = window.open(startingLocation, 'MyDialog',800,600,'menubar=0,toolbar=0');    
+    alert(data);
 }
